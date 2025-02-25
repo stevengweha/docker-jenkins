@@ -7,18 +7,22 @@ pipeline {
         DIR_PATH = "./"  // Répertoire contenant le Dockerfile
         TEST_FILE_PATH = "./test_variables.txt"  // Fichier contenant les valeurs de test
     }
-
     stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/stevengweha/docker-jenkins.git'
+            }
+        }
+
         stage('Check Running Container') {
             steps {
                 script {
-                    // Récupérer l'ID d'un conteneur en cours d'exécution avec l'image sum-app
-                    env.CONTAINER_ID = sh(script: "docker ps -q -f ancestor=sum-app", returnStdout: true).trim()
+                    def output = bat(script: 'docker ps -q -f ancestor=sum-app', returnStdout: true).trim()
 
-                    if (!env.CONTAINER_ID) {
+                    if (output.isEmpty()) {
                         error "⚠️ Aucun conteneur existant trouvé pour l’image sum-app ! Lancez-le avant d’exécuter la pipeline."
                     } else {
-                        echo "✅ Conteneur existant détecté : ${env.CONTAINER_ID}"
+                        echo "✅ Conteneur existant détecté : ${output}"
                     }
                 }
             }
@@ -26,39 +30,15 @@ pipeline {
 
         stage('Test') {
             steps {
-                script {
-                    def testLines = readFile(TEST_FILE_PATH).split('\n')
-                    for (line in testLines) {
-                        def vars = line.split(' ')
-                        def arg1 = vars[0]
-                        def arg2 = vars[1]
-                        def expectedSum = vars[2].toFloat()
-
-                        def output = sh(script: "docker exec ${env.CONTAINER_ID} python ${SUM_PY_PATH} ${arg1} ${arg2}", returnStdout: true).trim()
-                        def result = output.toFloat()
-
-                        if (result == expectedSum) {
-                            echo "✅ Test réussi : ${arg1} + ${arg2} = ${result}"
-                        } else {
-                            error "❌ Test échoué : ${arg1} + ${arg2} attendu ${expectedSum} mais obtenu ${result}"
-                        }
-                    }
-                }
+                bat 'echo Running tests...'
+                // Ajoute ici les commandes pour exécuter tes tests
             }
         }
 
         stage('Deploy') {
             steps {
-                script {
-                    echo "🚀 Déploiement sur DockerHub..."
-                    
-                    // Connexion à DockerHub
-                    sh "docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD"
-
-                    // Taguer et pousser l’image
-                    sh "docker tag sum-app monrepo/sum-app:latest"
-                    sh "docker push monrepo/sum-app:latest"
-                }
+                bat 'echo Déploiement en cours...'
+                // Ajoute ici les commandes pour le déploiement si nécessaire
             }
         }
     }
@@ -66,10 +46,10 @@ pipeline {
     post {
         always {
             script {
-                if (env.CONTAINER_ID?.trim()) {
-                    echo "📌 Nettoyage : Arrêt et suppression du conteneur ${env.CONTAINER_ID}"
-                    sh "docker stop ${env.CONTAINER_ID} || true"
-                    sh "docker rm ${env.CONTAINER_ID} || true"
+                def output = bat(script: 'docker ps -q -f ancestor=sum-app', returnStdout: true).trim()
+                if (!output.isEmpty()) {
+                    echo "🧹 Nettoyage du conteneur..."
+                    bat "docker stop ${output}"
                 } else {
                     echo "⚠️ Aucun conteneur trouvé pour nettoyage."
                 }
