@@ -7,8 +7,13 @@ pipeline {
         DIR_PATH = "./"  
         TEST_FILE_PATH = "./test_variables.txt"  
     }
-
     stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/stevengweha/docker-jenkins.git'
+            }
+        }
+
         stage('Check Running Container') {
             steps {
                 script {
@@ -21,7 +26,7 @@ pipeline {
                     if (!env.CONTAINER_ID) {
                         error "⚠️ Aucun conteneur existant trouvé pour l’image sum-app ! Assurez-vous qu'il est lancé avant d'exécuter la pipeline."
                     } else {
-                        echo "✅ Conteneur existant détecté : ${env.CONTAINER_ID}"
+                        echo "✅ Conteneur existant détecté : ${output}"
                     }
                 }
             }
