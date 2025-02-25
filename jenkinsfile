@@ -1,0 +1,79 @@
+pipeline {
+    agent any  
+
+    environment {
+        CONTAINER_ID = ""  // ID du conteneur existant
+        SUM_PY_PATH = "./sum.py"  // Chemin du script Python
+        DIR_PATH = "./"  // Répertoire contenant le Dockerfile
+        TEST_FILE_PATH = "./test_variables.txt"  // Fichier contenant les valeurs de test
+    }
+
+    stages {
+        stage('Check Running Container') {
+            steps {
+                script {
+                    // Récupérer l'ID d'un conteneur en cours d'exécution avec l'image sum-app
+                    env.CONTAINER_ID = sh(script: "docker ps -q -f ancestor=sum-app", returnStdout: true).trim()
+
+                    if (!env.CONTAINER_ID) {
+                        error "⚠️ Aucun conteneur existant trouvé pour l’image sum-app ! Lancez-le avant d’exécuter la pipeline."
+                    } else {
+                        echo "✅ Conteneur existant détecté : ${env.CONTAINER_ID}"
+                    }
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    def testLines = readFile(TEST_FILE_PATH).split('\n')
+                    for (line in testLines) {
+                        def vars = line.split(' ')
+                        def arg1 = vars[0]
+                        def arg2 = vars[1]
+                        def expectedSum = vars[2].toFloat()
+
+                        def output = sh(script: "docker exec ${env.CONTAINER_ID} python ${SUM_PY_PATH} ${arg1} ${arg2}", returnStdout: true).trim()
+                        def result = output.toFloat()
+
+                        if (result == expectedSum) {
+                            echo "✅ Test réussi : ${arg1} + ${arg2} = ${result}"
+                        } else {
+                            error "❌ Test échoué : ${arg1} + ${arg2} attendu ${expectedSum} mais obtenu ${result}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    echo "🚀 Déploiement sur DockerHub..."
+                    
+                    // Connexion à DockerHub
+                    sh "docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD"
+
+                    // Taguer et pousser l’image
+                    sh "docker tag sum-app monrepo/sum-app:latest"
+                    sh "docker push monrepo/sum-app:latest"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                if (env.CONTAINER_ID?.trim()) {
+                    echo "📌 Nettoyage : Arrêt et suppression du conteneur ${env.CONTAINER_ID}"
+                    sh "docker stop ${env.CONTAINER_ID} || true"
+                    sh "docker rm ${env.CONTAINER_ID} || true"
+                } else {
+                    echo "⚠️ Aucun conteneur trouvé pour nettoyage."
+                }
+            }
+        }
+    }
+}
