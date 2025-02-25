@@ -17,7 +17,7 @@ pipeline {
         stage('Check Running Container') {
             steps {
                 script {
-                    def output = bat(script: 'docker ps -q -f ancestor=sum-app', returnStdout: true).trim()
+                    def output = sh(script: 'docker ps -q -f ancestor=sum-app', returnStdout: true).trim()
 
                     if (output.isEmpty()) {
                         error "⚠️ Aucun conteneur existant trouvé pour l’image sum-app ! Lancez-le avant d’exécuter la pipeline."
