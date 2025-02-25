@@ -2,21 +2,24 @@ pipeline {
     agent any  
 
     environment {
-        CONTAINER_ID = ""  // ID du conteneur existant
-        SUM_PY_PATH = "./sum.py"  // Chemin du script Python
-        DIR_PATH = "./"  // Répertoire contenant le Dockerfile
-        TEST_FILE_PATH = "./test_variables.txt"  // Fichier contenant les valeurs de test
+        CONTAINER_ID = ""  
+        SUM_PY_PATH = "./sum.py"  
+        DIR_PATH = "./"  
+        TEST_FILE_PATH = "./test_variables.txt"  
     }
 
     stages {
         stage('Check Running Container') {
             steps {
                 script {
-                    // Récupérer l'ID d'un conteneur en cours d'exécution avec l'image sum-app
-                    env.CONTAINER_ID = sh(script: "docker ps -q -f ancestor=sum-app", returnStdout: true).trim()
+                    if (isUnix()) {
+                        env.CONTAINER_ID = sh(script: "docker ps -q -f ancestor=sum-app", returnStdout: true).trim()
+                    } else {
+                        env.CONTAINER_ID = bat(script: "docker ps -q -f ancestor=sum-app", returnStdout: true).trim()
+                    }
 
                     if (!env.CONTAINER_ID) {
-                        error "⚠️ Aucun conteneur existant trouvé pour l’image sum-app ! Lancez-le avant d’exécuter la pipeline."
+                        error "⚠️ Aucun conteneur existant trouvé pour l’image sum-app ! Assurez-vous qu'il est lancé avant d'exécuter la pipeline."
                     } else {
                         echo "✅ Conteneur existant détecté : ${env.CONTAINER_ID}"
                     }
@@ -34,7 +37,13 @@ pipeline {
                         def arg2 = vars[1]
                         def expectedSum = vars[2].toFloat()
 
-                        def output = sh(script: "docker exec ${env.CONTAINER_ID} python ${SUM_PY_PATH} ${arg1} ${arg2}", returnStdout: true).trim()
+                        def output
+                        if (isUnix()) {
+                            output = sh(script: "docker exec ${env.CONTAINER_ID} python ${SUM_PY_PATH} ${arg1} ${arg2}", returnStdout: true).trim()
+                        } else {
+                            output = bat(script: "docker exec ${env.CONTAINER_ID} python ${SUM_PY_PATH} ${arg1} ${arg2}", returnStdout: true).trim()
+                        }
+
                         def result = output.toFloat()
 
                         if (result == expectedSum) {
@@ -52,12 +61,15 @@ pipeline {
                 script {
                     echo "🚀 Déploiement sur DockerHub..."
                     
-                    // Connexion à DockerHub
-                    sh "docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD"
-
-                    // Taguer et pousser l’image
-                    sh "docker tag sum-app monrepo/sum-app:latest"
-                    sh "docker push monrepo/sum-app:latest"
+                    if (isUnix()) {
+                        sh "docker login -u \$DOCKER_USERNAME -p \$DOCKER_PASSWORD"
+                        sh "docker tag sum-app monrepo/sum-app:latest"
+                        sh "docker push monrepo/sum-app:latest"
+                    } else {
+                        bat "docker login -u %DOCKER_USERNAME% -p %DOCKER_PASSWORD%"
+                        bat "docker tag sum-app monrepo/sum-app:latest"
+                        bat "docker push monrepo/sum-app:latest"
+                    }
                 }
             }
         }
@@ -68,8 +80,13 @@ pipeline {
             script {
                 if (env.CONTAINER_ID?.trim()) {
                     echo "📌 Nettoyage : Arrêt et suppression du conteneur ${env.CONTAINER_ID}"
-                    sh "docker stop ${env.CONTAINER_ID} || true"
-                    sh "docker rm ${env.CONTAINER_ID} || true"
+                    if (isUnix()) {
+                        sh "docker stop ${env.CONTAINER_ID} || true"
+                        sh "docker rm ${env.CONTAINER_ID} || true"
+                    } else {
+                        bat "docker stop ${env.CONTAINER_ID} || echo ignored"
+                        bat "docker rm ${env.CONTAINER_ID} || echo ignored"
+                    }
                 } else {
                     echo "⚠️ Aucun conteneur trouvé pour nettoyage."
                 }
